@@ -249,7 +249,18 @@ class AI:
             arr.append([y,x,move[0],move[1],mk])
         return arr
 
-
+'''
+Major factors that go into a chess eval. function
+- Material
+- Pawn Structure
+- Evaluation of Pieces
+- Mobility
+- Center Control
+- King Safety
+- Space
+https://chess.stackexchange.com/questions/41180/how-do-you-program-a-chess-bot-with-specific-style
+Examples of Eval out there- https://www.chessprogramming.org/Evaluation
+'''
     def calculateb(self,gametiles):
         value=0
         for x in range(8):
