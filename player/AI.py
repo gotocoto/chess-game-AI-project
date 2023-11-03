@@ -3,6 +3,7 @@ from board.tile import Tile
 from pieces.nullpiece import nullpiece
 from pieces.queen import queen
 import random
+import copy
 
 class AI:
 
@@ -263,21 +264,46 @@ class AI:
     Examples of Eval out there-  https://www.chessprogramming.org/Evaluation
     '''
     def calculateb(self,gametilesOLD):
+        def getDeffenders(attacks,m,k,alliance):
+            deffenders= []
+            for i in attacks[m][k]:
+                if(i.pieceonTile.alliance==alliance):
+                    deffenders.append(i.pieceonTile.tostring())
+            return deffenders
         #LOWER NUMBER IS better for black and higher number better for white
+        CENTER_TILES=[(3,3),(3,4),(4,3),(4,4)]
+        WIDER_CENTER_TILES=[(2,2),(2,3),(2,4),(2,5),(3,5),(4,5),(5,5),(5,4),(5,3),(5,2),(4,2),(3,2)]
+        BLACK_TILES= "PNBRQK"
+        WHITE_TILES= "pnbrqk"
         gametiles = gametilesOLD.copy()
         materialValue=0
         onBoard = {}
         for i in "PNBRQKPpnbrqk-":
             onBoard[i]=0
         pieceWeight = {'P':-100,'N':-350,'B':-350,'R':-525,'Q':-1000,'K':-10000,'p':100,'n':350,'b':350,'r':525,'q':1000,'k':10000,'-':0}
+        
         for x in range(8):
             for y in range(8):
                 onBoard[gametiles[y][x].pieceonTile.tostring()]+=1
         #mapToValue = lambda x: pieceWeight[x[0]]*x[1]
         materialValue = sum(list(map(lambda x: pieceWeight[x[0]]*x[1],onBoard.items())))
         #print(materialValue)
+        allWhitePieces = [[0 for x in range(8)] for y in range(8)]
+        allBlackPieces = [[0 for x in range(8)] for y in range(8)]
+        for m in range(8):
+            for k in range(8):
+                if(gametiles[m][k].pieceonTile.tostring()!='-'):
+                    tile = copy.deepcopy(gametiles[m][k])
+                    tile.pieceonTile.alliance='White'
+                    allWhitePieces[m][k] = tile
+                    tile = copy.deepcopy(gametiles[m][k])
+                    tile.pieceonTile.alliance='Black'
+                    allBlackPieces[m][k] = tile
+                else:
+                    allWhitePieces[m][k] = gametiles[m][k]
+                    allBlackPieces[m][k] = gametiles[m][k]
+        movableOptions = [[[] for x in range(8)] for y in range(8)]
         attacks = [[[] for x in range(8)] for y in range(8)]
-        
         #Gets all the moves to every square
         for m in range(8):
             for k in range(8):
@@ -294,9 +320,24 @@ class AI:
                     #print(gametiles[m][k].pieceonTile.calculatecoordinates())
                     if moves is not None:
                         for move in moves:
-                                attacks[move[0]][move[1]].append(gametiles[m][k])
+                                movableOptions[move[0]][move[1]].append(gametiles[m][k])
+                    if(gametiles[m][k].pieceonTile.alliance=="Black"):
+                        allWhitePieces[m][k].pieceonTile.alliance="Black"
+                        moves=gametiles[m][k].pieceonTile.legalmoveb(allWhitePieces)
+                        if moves is not None:
+                            for move in moves:
+                                    attacks[move[0]][move[1]].append(gametiles[m][k])
+                        allWhitePieces[m][k].pieceonTile.alliance="White"
+                    else:
+                        allBlackPieces[m][k].pieceonTile.alliance="White"
+                        moves=gametiles[m][k].pieceonTile.legalmoveb(allBlackPieces)
+                        if moves is not None:
+                            for move in moves:
+                                    attacks[move[0]][move[1]].append(gametiles[m][k])
+                        allBlackPieces[m][k].pieceonTile.alliance="Black"
                     #emptyBoard[m][k] = Tile(emptyBoard[m][k].tileCorrdinate,nullpiece())
-                    
+        
+
         #print(attacks)
         
         #Gets if white is checked
@@ -310,33 +351,33 @@ class AI:
 
         #Material
         #https://www.chessprogramming.org/Material_Hash_Table Chess 4.5
-        WinningSide = 'p' if (materialValue>0) else 'P'
-        MD = abs(materialValue)
+        standardPieceWeight = {'P':-100,'N':-325,'B':-350,'R':-500,'Q':-900,'K':0,'p':100,'n':325,'b':350,'r':500,'q':900,'k':0,'-':0}
+        standardMaterialValue = sum(list(map(lambda x: standardPieceWeight[x[0]]*x[1],onBoard.items())))
+        WinningSide = 'p' if (standardMaterialValue>0) else 'P'
+       
+        MD = abs(standardMaterialValue)
         PA = onBoard[WinningSide]
-        materialTotal = sum(list(map(lambda x: abs(pieceWeight[x[0]]*x[1]),onBoard.items())))
+        materialTotal = sum(list(map(lambda x: abs(standardPieceWeight[x[0]]*x[1]),onBoard.items())))
         MS = min(2400,MD)+(MD*PA*(8000-materialTotal))/(6400*(PA+1))
         TotalMaterialAdvantage = min(3100,MS)
-        print(TotalMaterialAdvantage)
+        print(WinningSide,standardMaterialValue,onBoard[WinningSide],MS)
+        assert(TotalMaterialAdvantage>=0)
+        if(materialValue<0):
+            TotalMaterialAdvantage = -1*TotalMaterialAdvantage 
+        #print(TotalMaterialAdvantage)
+        ''' Possible Improvements https://www.chessprogramming.org/Material
+             Bonus for the bishop pair (bishops complement each other, controlling squares of different color)
+            Penalty for the rook pair (Larry Kaufman called it "principle of redundancy")
+            Penalty for the knight pair (as two knights are less successful against the rook than any other pair of minor pieces)
+            decreasing the value of the rook pawns and increasing the value of the central pawns (though this can be done in the piece-square tables as well)
+            Trade down bonus that encourages the winning side to trade pieces but no pawns [3]
+            Penalty for having no pawns, as it makes it more difficult to win the endgame
+            Bad trade penalty as proposed by Robert Hyatt, that is penalizing the material imbalances that are disadvantageous like having three pawns for a piece or a rook for two minors.
+            Elephantiasis effect as suggested by Harm Geert Muller (meaning that stronger pieces lose part of their value in presence of weaker pieces)'''
+        
         #Piece-square Tables
         #Pawn Structure
-        #Evaluation of pieces
-        #Mobility
-        #Center Control
-        #Connectivity
-        #Trapped Pieces
-        #King Safety
-        #Space
-        #Tempo
-        '''
-        Attacking enemy pieces pinning own pieces
-            Pieces attacking enemy pieces that pin own ones are due some bigger bonus than the standard
-            one for attacking pieces (by 1/4 bigger), even if the pinning piece is well defended and the
-            attacking piece is of bigger power in relation to the pinner, as this might have some important
-            tactical implications.
-        Bishop the colour of a weak spot in the enemy king position with the enemy side having no bishop of the same colour
-            In that case the bishop without an enemy counterpart would score +20cps for any weak spot
-            of the same colour, as attacking chances would greatly increase with queens on the board.
-        Flexible pawn structures
+        ''' Flexible pawn structures
             A flexible pawn structure would be any group of 3 ps with the following characteristics:
             - being important in some way
             - most of the moves of the ps of that group would result in another group of ps sharing the
@@ -360,7 +401,146 @@ class AI:
             3 horizontally adjacent ps, the least valuable of the flexible structures.
             Flexibility bonus points would receive also larger groups of ps with 3 of them exhibiting the
             above characteristics. Structures with a least advanced p on the 2nd rank would not be
-            considered.
+            considered.'''
+        
+        #Evaluation of pieces
+        #Mobility
+        #Center Control
+        #Connectivity
+        #Trapped Pieces
+        #King Safety
+        #Space
+        #Tempo
+
+        #Opening
+        '''
+        Control of center http://www.winboardengines.de/doc/LittleChessEvaluationCompendium-2010-04-07.pdf
+        Control of focal center (i.e. the squares e4,d4,e5,d5)
+        Pawns occupying the focal center
+        +40 for each p on such a square
+        Pieces occupying the focal center
+        +20 for a minor piece and +30 for q on such a square
+        Pawns keeping control of focal center
+        +10 for such a function (eg. the c3,d3,e3,f3 ps are controlling one square each as well as the
+        c4,d4,e4,f4 ps do)
+        Pieces keeping control of focal center
+        +10 for such a function for each square a piece controls (eg. the wnf3 has under control the d4
+        and e5 squares, so it would get a bonus of +20). This concerns all pieces.'''
+        centerControl = 0
+        for m in [3,4]:
+            for k in [3,4]:
+                tile =gametiles[m][k].pieceonTile.tostring()
+                if(tile=='P'):
+                    centerControl-=40
+                if(tile=='p'):
+                    centerControl+=40
+                if(tile in 'BN'):
+                    centerControl-=20
+                if(tile in 'bn'):
+                    centerControl+=20 
+                if(tile=='Q'):
+                    centerControl-=30
+                if(tile=='q'):
+                    centerControl+=30
+                for attacker in attacks[m][k]:
+                    if(attacker.pieceonTile.alliance=="Black"):
+                        centerControl-=10
+                    else:
+                        centerControl+=10
+        '''
+        Control of wider center (i.e. the squares bound by c3-f3-f6-c6 excluding the focal centersquares)
+        Pieces occupying the wider center
+        +10 is given for every piece on a square of the wider center
+        '''
+
+        for x,y in WIDER_CENTER_TILES:
+            tile =gametiles[m][k].pieceonTile.tostring()
+            if(tile=='-'):
+                continue
+            elif(tile in BLACK_TILES):
+                centerControl-=10
+            else:
+                centerControl+=10
+        developmentRating = 0
+        if(onBoard['-']<34):
+            developed={'P':0}
+            for i in 'RNBQKBNR':
+                developed[i]=0
+            for index, item in enumerate('RNBQKBNR'):
+                if(gametiles[0][index].pieceonTile.tostring()!=item):
+                    developed[item]+=1
+            for i in range(8):
+                if(gametiles[1][index].pieceonTile.tostring()!='P'):
+                    developed['P']+=1
+            
+
+            # knights 0,1 0,6
+            # bishops 0,2 0,5
+            #+20 for developing n before b
+            
+            if(developed['N']>developed['B']):
+                developmentRating -= 20
+            #-30 for developing q before 2 minor pieces are developed
+            if(developed['Q']==1 and developed['N']+developed['B']<2):
+                developmentRating += 20
+            #-50 for developing r before 2 minors are developed
+            if(developed['R']==1 and developed['N']+developed['B']<2):
+                developmentRating += 20
+            #+60 for castling to developing pieces on the other side
+            if(gametiles[0][6].pieceonTile.tostring()=='K'):
+                developmentRating -= 60
+            
+            #+50 for castling short to castling long if both possible
+            if(gametiles[0][2].pieceonTile.tostring()=='K'):
+                developmentRating -= 50
+        
+        '''
+        Phalangian development (also middlegame)
+        Probably borrowed by Phalanx, I do not know. This assumes development of pawns and
+        pieces in compact order. -20 for own p into the enemy camp unsupported by other ps (eg.
+        wpb5, wpa2, no c pawn). -30 for own piece into the enemy camp unsupported by other pawns
+        or pieces.
+        '''
+        phalangianDevelopment = 0
+        for m in range(4,7):
+            for k in range(4,7):
+                tile =gametiles[m][k].pieceonTile.tostring()
+                if(tile=='P'):
+                    deffenders = getDeffenders(attacks,m,k,"Black")
+                    if(len(deffenders)==0):
+                        phalangianDevelopment +=20
+                    if('P' not in deffenders):
+                        phalangianDevelopment +=30
+        #print("PHILALSDSNAD A"+str(phalangianDevelopment))
+
+        
+        '''
+        Mobility
+        +    10 for each free square a piece has access to'''
+        mobility = 0
+        for m in range(8):
+            for k in range(8):
+                for x,y,piece in movableOptions[m][k]:
+                    if(piece in BLACK_TILES):
+                        mobility-=10
+                    else:
+                        mobility+=10
+        
+        coordination = 0
+
+        '''
+
+        Attacking enemy pieces pinning own pieces
+            Pieces attacking enemy pieces that pin own ones are due some bigger bonus than the standard
+            one for attacking pieces (by 1/4 bigger), even if the pinning piece is well defended and the
+            attacking piece is of bigger power in relation to the pinner, as this might have some important
+            tactical implications.
+        Bishop the colour of a weak spot in the enemy king position with the enemy side having no bishop of the same colour
+            In that case the bishop without an enemy counterpart would score +20cps for any weak spot
+            of the same colour, as attacking chances would greatly increase with queens on the board.
+        '''
+       
+        '''
         Mobility takes precedence over attacks
             In the case a certain piece has very good attacking potential, but very low mobility (no free or
             just one free squares), it would be wise not to consider such moves at all, as usually deeper
@@ -740,7 +920,7 @@ class AI:
         But, of course, penalties for undefended pieces might be differentiated.
         An undefended queen might get -10cps, and undefended rook -5cps, and an undefended minor
         piece -3cps.'''
-        value = TotalMaterialAdvantage
+        value = TotalMaterialAdvantage + centerControl + phalangianDevelopment +developmentRating +mobility
         return value
 
 
