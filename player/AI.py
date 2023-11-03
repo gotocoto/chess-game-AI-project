@@ -262,6 +262,9 @@ class AI:
     - Space
     https://chess.stackexchange.com/questions/41180/how-do-you-program-a-chess-bot-with-specific-style
     Examples of Eval out there-  https://www.chessprogramming.org/Evaluation
+
+    A majority of the code was made with the help of chatGBT but the parts of the evaluation functions were determine from research into the
+    historically best methods for evaluating the states. The parameters were farther tuned to optimize the win rate of the machine.
     '''
     # Constants
     PHALANGIAN_PENALTY = 20
@@ -344,6 +347,7 @@ class AI:
 
         return piece_safety_score
     def evaluate_piece_protection(self, gametiles, x, y, piece):
+        # Can be improved by getting all the attacking squares then checking 
         # Evaluate how well a piece is protected
         defending_pieces = []
 
