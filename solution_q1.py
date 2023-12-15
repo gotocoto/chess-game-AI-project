@@ -39,7 +39,7 @@ for b in pm:
             for j in pm:
                 for m in pm:
                     BEAJM[b+e+a+j+m]= B[b]*E[e]*A_BE[a+b+e]*A_J[a+j]*A_M[a+m]
-print(sum(BEAJM.values()))
+#print(sum(BEAJM.values()))
 newJB = {}
 for j in pm:
     for b in pm:
